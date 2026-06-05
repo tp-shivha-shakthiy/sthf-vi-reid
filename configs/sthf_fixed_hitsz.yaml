@@ -7,10 +7,15 @@ data:
   img_size: [224, 224]
 
 model:
+  name: sthf_fixed
   backbone: resnet50
   feature_dim: 2048
   num_classes: 100
   sthf_cutoff: 0.5
+
+dataset:
+  sequence_length: 6
+  image_size: [288, 144]
 
 train:
   epochs: 60

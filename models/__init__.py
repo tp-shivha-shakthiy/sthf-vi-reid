@@ -1,5 +1,5 @@
-from .resnet_backbone import ResNetBackbone
-from .baseline import Baseline
+from .resnet_backbone import ResNet50VideoBackbone
+from .baseline import BaselineModel
 from .sthpf import STHPF
 from .adaptive_sthpf import AdaptiveSTHPF
 from .modality_purifier import ModalityPurifier
