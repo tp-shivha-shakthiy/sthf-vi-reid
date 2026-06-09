@@ -1,10 +1,16 @@
 # ST-HF with adaptive cutoff configuration for HITSZ-VCM
+# The network learns spatial/temporal cutoff frequencies during training.
+
 data:
   root: ./data/hitsz_vcm
-  batch_size: 32
+  batch_size: 16
   num_workers: 4
-  seq_len: 8
-  img_size: [224, 224]
+  seq_len: 6
+  img_size: [288, 144]
+
+sampling:
+  num_ids: 4
+  clips_per_id: 4
 
 model:
   name: sthf_adaptive
@@ -13,12 +19,10 @@ model:
   num_classes: 100
   sthf_mode: adaptive
 
-dataset:
-  sequence_length: 6
-  image_size: [288, 144]
-
 train:
   epochs: 60
-  lr: 0.0001
+  lr: 0.00035
+  optimizer: adam
+  scheduler: cosine
   weight_decay: 0.0005
   milestones: [30, 50]
