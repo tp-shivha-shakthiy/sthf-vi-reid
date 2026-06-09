@@ -1,21 +1,31 @@
 # Cutoff ablation sweeps for HITSZ-VCM
+# Sweeps spatial_cutoff_fs to measure its impact on performance.
+
 data:
   root: ./data/hitsz_vcm
-  batch_size: 32
+  batch_size: 16
   num_workers: 4
-  seq_len: 8
-  img_size: [224, 224]
+  seq_len: 6
+  img_size: [288, 144]
+
+sampling:
+  num_ids: 4
+  clips_per_id: 4
 
 model:
+  name: sthf_fixed
   backbone: resnet50
   feature_dim: 2048
   num_classes: 100
+  temporal_cutoff_ft: 2
 
 sweep:
-  cutoffs: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  spatial_cutoff_fs: [2, 5, 10, 15, 20]
 
 train:
   epochs: 60
-  lr: 0.0001
+  lr: 0.00035
+  optimizer: adam
+  scheduler: cosine
   weight_decay: 0.0005
   milestones: [30, 50]
