@@ -1,4 +1,7 @@
 import torch
+from tqdm import tqdm
+
+from engine.checkpoint import save_checkpoint
 
 
 class Trainer:
@@ -26,7 +29,34 @@ class Trainer:
         return losses
 
     def train_epoch(self, loader):
-        return {}
+        self.model.train()
+        epoch_losses = {}
+        num_batches = 0
+
+        for batch in tqdm(loader, desc="Train", leave=False):
+            losses = self.training_step(batch)
+            for key, val in losses.items():
+                epoch_losses[key] = epoch_losses.get(key, 0.0) + val.item()
+            num_batches += 1
+
+        avg_losses = {k: v / num_batches for k, v in epoch_losses.items()}
+        return avg_losses
 
     def fit(self, train_loader, val_loader, epochs):
-        pass
+        save_dir = self.cfg.get("train", {}).get("save_dir", "experiments/run")
+
+        for epoch in range(1, epochs + 1):
+            train_losses = self.train_epoch(train_loader)
+
+            log_parts = [f"Epoch {epoch}/{epochs}"]
+            for key, val in train_losses.items():
+                log_parts.append(f"{key}: {val:.4f}")
+            print(" | ".join(log_parts))
+
+            state = {
+                "epoch": epoch,
+                "model_state_dict": self.model.state_dict(),
+                "optimizer_state_dict": self.optimizer.state_dict(),
+                "train_losses": train_losses,
+            }
+            save_checkpoint(state, f"{save_dir}/checkpoint_last.pth")

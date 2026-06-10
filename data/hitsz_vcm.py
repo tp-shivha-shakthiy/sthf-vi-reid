@@ -2,6 +2,10 @@ import os
 import glob
 import random
 
+import torch
+from PIL import Image
+import torchvision.transforms.functional as F
+
 from .base_video_dataset import BaseVideoDataset
 
 
@@ -145,9 +149,6 @@ class HITSZVCM(BaseVideoDataset):
         start = random.randint(0, n_frames - self.seq_len)
         selected_paths = frame_paths[start:start + self.seq_len]
 
-        from PIL import Image
-        import torchvision.transforms.functional as F
-
         frames = []
         for path in selected_paths:
             img = Image.open(path).convert("RGB")
@@ -158,7 +159,6 @@ class HITSZVCM(BaseVideoDataset):
         else:
             frames = [F.to_tensor(f) for f in frames]
 
-        import torch
         frames_tensor = torch.stack(frames, dim=0)
 
         return {
