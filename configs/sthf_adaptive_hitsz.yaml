@@ -19,6 +19,12 @@ model:
   num_classes: 100
   sthf_mode: adaptive
 
+loss:
+  lambda_id: 1.0
+  lambda_tri: 1.0
+  lambda_int_id: 1.0
+  lambda_int_tri: 1.0
+
 train:
   epochs: 60
   lr: 0.00035

@@ -108,3 +108,56 @@ class TestBatchLevelShapes:
                    for _ in range(2)]
         batch = collate_video_fn(samples)
         assert batch["frames"].shape == (2, 6, 3, 288, 144)
+
+
+class TestVideoSampler:
+    """Verify identity-balanced VideoSampler produces correct batch sizes."""
+
+    def test_sampler_produces_correct_batch_size(self):
+        from data.video_sampler import VideoSampler
+
+        class FakeDataset:
+            def __init__(self):
+                self.samples = [
+                    {"pid": 0}, {"pid": 0}, {"pid": 0}, {"pid": 0},
+                    {"pid": 1}, {"pid": 1}, {"pid": 1}, {"pid": 1},
+                    {"pid": 2}, {"pid": 2}, {"pid": 2}, {"pid": 2},
+                    {"pid": 3}, {"pid": 3}, {"pid": 3}, {"pid": 3},
+                ]
+
+        dataset = FakeDataset()
+        sampler = VideoSampler(dataset, num_ids=4, clips_per_id=2, shuffle=False)
+        batches = list(sampler)
+        for batch in batches:
+            assert len(batch) == 8, f"Expected batch size 8, got {len(batch)}"
+
+    def test_sampler_batch_has_all_unique_pids(self):
+        from data.video_sampler import VideoSampler
+
+        class FakeDataset:
+            def __init__(self):
+                self.samples = [
+                    {"pid": 0}, {"pid": 0}, {"pid": 0},
+                    {"pid": 1}, {"pid": 1}, {"pid": 1},
+                    {"pid": 2}, {"pid": 2}, {"pid": 2},
+                    {"pid": 3}, {"pid": 3}, {"pid": 3},
+                ]
+
+        dataset = FakeDataset()
+        sampler = VideoSampler(dataset, num_ids=4, clips_per_id=1, shuffle=False)
+        batches = list(sampler)
+        for batch in batches:
+            pids = [dataset.samples[i]["pid"] for i in batch]
+            assert len(set(pids)) == 4, f"Expected 4 unique PIDs, got {set(pids)}"
+
+    def test_sampler_len_matches_expected_batches(self):
+        from data.video_sampler import VideoSampler
+
+        class FakeDataset:
+            def __init__(self):
+                self.samples = [{"pid": i // 4} for i in range(16)]
+
+        dataset = FakeDataset()
+        sampler = VideoSampler(dataset, num_ids=4, clips_per_id=4, shuffle=False)
+        expected = 16 // (4 * 4)
+        assert len(sampler) == max(1, expected)

@@ -22,6 +22,12 @@ model:
 sweep:
   spatial_cutoff_fs: [2, 5, 10, 15, 20]
 
+loss:
+  lambda_id: 1.0
+  lambda_tri: 1.0
+  lambda_int_id: 1.0
+  lambda_int_tri: 1.0
+
 train:
   epochs: 60
   lr: 0.00035

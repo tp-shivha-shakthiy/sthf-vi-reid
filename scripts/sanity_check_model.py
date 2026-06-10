@@ -50,8 +50,9 @@ def main():
 
     config = load_config(args.config)
 
-    sequence_length = config["dataset"].get("sequence_length", 6)
-    image_size = config["dataset"].get("image_size", [288, 144])
+    data_cfg = config.get("data", {})
+    sequence_length = data_cfg.get("seq_len", 6)
+    image_size = tuple(data_cfg.get("img_size", [288, 144]))
     height, width = image_size
 
     model = build_model(config, num_classes=10)
