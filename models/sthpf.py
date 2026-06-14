@@ -62,7 +62,7 @@ class FixedSTHPF(nn.Module):
         x_filtered = torch.fft.ifftshift(x_filtered, dim=(1, 3, 4))
         high_freq = torch.fft.ifftn(x_filtered, dim=(1, 3, 4)).real
 
-        return high_freq
+        return high_freq.contiguous()
 
 
 # Backward-compatible alias.
