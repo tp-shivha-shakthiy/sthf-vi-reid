@@ -47,28 +47,33 @@ def build_model(config, num_classes=10):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
-    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--debug", action="store_true",
+                        help="Single training step with dummy batch")
     parser.add_argument("--real-data", action="store_true",
                         help="Use real HITSZ-VCM batches instead of dummy tensors")
+    parser.add_argument("--epochs", type=int, default=None,
+                        help="Override training epochs (default: config value)")
     args = parser.parse_args()
 
     config = load_config(args.config)
 
-    if not args.debug:
-        parser.error("Only --debug mode is currently supported for training.")
-
     data_cfg = config.get("data", {})
+    train_cfg = config.get("train", {})
+    model_name = config["model"]["name"]
+
     sequence_length = data_cfg.get("seq_len", 6)
     img_size = tuple(data_cfg.get("img_size", [288, 144]))
     height, width = img_size
-    batch_size = 4
+    batch_size = data_cfg.get("batch_size", 16)
     num_classes = config.get("model", {}).get("num_classes", 10)
-    lr = config.get("train", {}).get("lr", 3.5e-4)
+    lr = train_cfg.get("lr", 3.5e-4)
+    epochs = args.epochs if args.epochs is not None else train_cfg.get("epochs", 60)
 
     model = build_model(config, num_classes=num_classes)
     criterion = build_loss(config)
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    trainer = Trainer(model, criterion, optimizer, config)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    trainer = Trainer(model, criterion, optimizer, scheduler, config)
 
     root = data_cfg.get("root", "./data/hitsz_vcm")
 
@@ -92,22 +97,33 @@ def main():
         batch = next(iter(loader))
         print(f"First batch frames shape: {batch['frames'].shape}")
     else:
+        n_ids = config.get("sampling", {}).get("num_ids", 4)
+        n_per_id = batch_size // n_ids
+        dummy_pids = torch.tensor([i for i in range(n_ids) for _ in range(n_per_id)])
         batch = {
             "frames": torch.randn(batch_size, sequence_length, 3, height, width),
-            "pids": torch.tensor([0, 0, 1, 1]),
+            "pids": dummy_pids,
             "camids": torch.zeros(batch_size, dtype=torch.long),
             "modalities": ["rgb"] * batch_size,
             "track_ids": torch.zeros(batch_size, dtype=torch.long),
         }
 
-    losses = trainer.training_step(batch)
-
-    print("Debug training step completed successfully.")
-    print(f"  id_loss:           {losses['id_loss'].item():.6f}")
-    print(f"  triplet_loss:      {losses['triplet_loss'].item():.6f}")
-    print(f"  int_id_loss:       {losses['int_id_loss'].item():.6f}")
-    print(f"  int_triplet_loss:  {losses['int_triplet_loss'].item():.6f}")
-    print(f"  total:             {losses['total'].item():.6f}")
+    if args.debug:
+        losses = trainer.training_step(batch)
+        print("Debug training step completed successfully.")
+        print(f"  id_loss:           {losses['id_loss'].item():.6f}")
+        print(f"  triplet_loss:      {losses['triplet_loss'].item():.6f}")
+        print(f"  int_id_loss:       {losses['int_id_loss'].item():.6f}")
+        print(f"  int_triplet_loss:  {losses['int_triplet_loss'].item():.6f}")
+        print(f"  total:             {losses['total'].item():.6f}")
+    elif args.real_data:
+        if epochs < 200:
+            print("WARNING: Running with fewer than 200 epochs — results are preliminary, not full reproduction.")
+        print(f"Training {model_name} for {epochs} epochs (lr={lr}, batch_size={batch_size})")
+        trainer.fit(loader, None, epochs)
+    else:
+        print("Use --debug for a single step or --real-data for full training.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

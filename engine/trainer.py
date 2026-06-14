@@ -5,10 +5,11 @@ from engine.checkpoint import save_checkpoint
 
 
 class Trainer:
-    def __init__(self, model, criterion, optimizer, cfg):
+    def __init__(self, model, criterion, optimizer, scheduler, cfg):
         self.model = model
         self.criterion = criterion
         self.optimizer = optimizer
+        self.scheduler = scheduler
         self.cfg = cfg
 
     def training_step(self, batch):
@@ -43,7 +44,8 @@ class Trainer:
         return avg_losses
 
     def fit(self, train_loader, val_loader, epochs):
-        save_dir = self.cfg.get("train", {}).get("save_dir", "experiments/run")
+        model_name = self.cfg.get("model", {}).get("name", "run")
+        save_dir = self.cfg.get("train", {}).get("save_dir", f"experiments/{model_name}")
 
         for epoch in range(1, epochs + 1):
             train_losses = self.train_epoch(train_loader)
@@ -60,3 +62,6 @@ class Trainer:
                 "train_losses": train_losses,
             }
             save_checkpoint(state, f"{save_dir}/checkpoint_last.pth")
+
+            if self.scheduler is not None:
+                self.scheduler.step()

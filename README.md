@@ -26,10 +26,30 @@ Current validation:
 - Forward contract tests pass
 - Loss tests pass
 - Debug training step runs successfully
+- Full training pipeline enabled (see Colab setup below)
 
-Planned:
-- Dataset loader integration
-- Full baseline training
-- Fixed STHF training
-- Evaluation metrics: Rank-k, mAP
-- Ablation comparison
+## Colab Dataset Setup
+
+The HITSZ-VCM dataset is not stored in GitHub. To train on real data in Colab:
+
+1. Download from Kaggle and extract to `/content/data/hitsz_vcm`
+2. Create symlinks inside the repo:
+
+```python
+%cd /content/ST-HF-VVI-ReID
+!rm -rf data/hitsz_vcm
+!mkdir -p data/hitsz_vcm
+!ln -s /content/data/hitsz_vcm/Train/Train data/hitsz_vcm/train
+!ln -s /content/data/hitsz_vcm/Test/Test data/hitsz_vcm/test
+!ln -s /content/data/hitsz_vcm/info data/hitsz_vcm/info
+!ls -l data/hitsz_vcm
+```
+
+3. Verify: `python scripts/sanity_check_dataset.py --config configs/baseline_hitsz.yaml`
+4. Train: `python scripts/train.py --config configs/baseline_hitsz.yaml` (add `--epochs N` for smoke runs)
+
+## Notes
+
+- Runs below 200 epochs are preliminary/smoke, not full reproduction.
+- Config `train.save_dir` controls checkpoint output path.
+- Use `--epochs` CLI flag to override config epochs for quick tests.

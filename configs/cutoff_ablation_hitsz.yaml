@@ -29,9 +29,9 @@ loss:
   lambda_int_tri: 1.0
 
 train:
-  epochs: 60
+  epochs: 150
   lr: 0.00035
   optimizer: adam
   scheduler: cosine
   weight_decay: 0.0005
-  milestones: [30, 50]
+  save_dir: experiments/hitsz_cutoff_ablation
