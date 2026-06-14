@@ -10,7 +10,7 @@ build/
 venv/
 .venv/
 env/
-
+kaggle.json
 # IDE
 .vscode/
 .idea/

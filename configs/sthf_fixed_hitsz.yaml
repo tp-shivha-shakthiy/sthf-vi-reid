@@ -16,13 +16,18 @@ model:
   name: sthf_fixed
   backbone: resnet50
   feature_dim: 2048
-  num_classes: 100
+  num_classes: 500
   sthf_cutoff: 0.5
   sthpf:
     type: fixed
     fs: 10
     ft: 2
 
+loss:
+  lambda_id: 1.0
+  lambda_tri: 1.0
+  lambda_int_id: 1.0
+  lambda_int_tri: 1.0
 dataset:
   sequence_length: 6
   image_size: [288, 144]
@@ -30,9 +35,9 @@ dataset:
   temporal_cutoff_ft: 2
 
 train:
-  epochs: 60
+  epochs: 200
   lr: 0.00035
   optimizer: adam
   scheduler: cosine
   weight_decay: 0.0005
-  milestones: [30, 50]
+  save_dir: experiments/hitsz_sthf_fixed

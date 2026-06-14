@@ -2,26 +2,20 @@ import torch
 import torch.nn as nn
 
 from models.resnet_backbone import ResNet50VideoBackbone
+from models.sthpf import FixedSTHPF
 
 
 class STHFModel(nn.Module):
     """
-    Skeleton for fixed/adaptive STHF model.
+    Fixed/adaptive STHF model.
 
-    Final model will contain:
+    Contains:
         - original video branch
-        - high-frequency branch
-        - ST-HPF module
-        - Modality Purifier
-        - SDC
-        - DSR
+        - high-frequency branch with ST-HPF
+        - classifiers for both branches
 
-    Day 1 version:
-        - Keeps the correct interface.
-        - Uses two ResNet-50 backbones:
-            original branch
-            intermediate/high-frequency branch placeholder
-        - Does not yet apply ST-HPF, SDC, or DSR.
+    The ST-HPF module is applied to frames before the intermediate backbone.
+    Modality Purifier, SDC, and DSR will be added in later phases.
     """
 
     def __init__(
@@ -34,6 +28,11 @@ class STHFModel(nn.Module):
         super().__init__()
 
         self.sthpf_type = sthpf_type
+
+        if sthpf_type == "fixed":
+            self.sthpf = FixedSTHPF(fs=10, ft=2)
+        else:
+            self.sthpf = None
 
         self.original_backbone = ResNet50VideoBackbone(pretrained=pretrained)
         self.intermediate_backbone = ResNet50VideoBackbone(pretrained=pretrained)
@@ -48,31 +47,26 @@ class STHFModel(nn.Module):
         self.int_classifier = nn.Linear(feature_dim, num_classes)
 
     def forward(self, frames: torch.Tensor, modalities=None):
-        """
-        Args:
-            frames: [B, T, C, H, W]
-            modalities: optional list[str]
-
-        Returns:
-            model output dictionary
-        """
-
-        # Original branch placeholder.
         features = self.original_backbone(frames)
         logits = self.classifier(features)
 
-        # Intermediate branch placeholder.
-        # Later this will receive ST-HPF output, not raw frames.
-        int_features = self.intermediate_backbone(frames)
+        if self.sthpf is not None:
+            high_freq_frames = self.sthpf(frames)
+            int_features = self.intermediate_backbone(high_freq_frames)
+        else:
+            int_features = self.intermediate_backbone(frames)
+
         int_logits = self.int_classifier(int_features)
+
+        extra = {
+            "model_type": f"sthf_{self.sthpf_type}",
+            "sthpf_type": self.sthpf_type,
+        }
 
         return {
             "features": features,
             "logits": logits,
             "int_features": int_features,
             "int_logits": int_logits,
-            "extra": {
-                "model_type": f"sthf_{self.sthpf_type}",
-                "sthpf_type": self.sthpf_type,
-            },
+            "extra": extra,
         }
