@@ -28,6 +28,11 @@ loss:
   lambda_tri: 1.0
   lambda_int_id: 1.0
   lambda_int_tri: 1.0
+dataset:
+  sequence_length: 6
+  image_size: [288, 144]
+  spatial_cutoff_fs: 10
+  temporal_cutoff_ft: 2
 
 train:
   epochs: 60
