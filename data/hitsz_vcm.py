@@ -2,6 +2,10 @@ import os
 import glob
 import random
 
+import torch
+from PIL import Image
+import torchvision.transforms.functional as F
+
 from .base_video_dataset import BaseVideoDataset
 
 
@@ -37,7 +41,10 @@ class HITSZVCM(BaseVideoDataset):
         super().__init__(root, seq_len, transform)
         self.split = split
         self.samples = []
+        self.pid2label = {}
+        self.label2pid = {}
         self._scan()
+        self._relabel_pids()
 
     def _parse_pid(self, dirname):
         """Extract numeric identity ID from a directory name."""
@@ -129,6 +136,15 @@ class HITSZVCM(BaseVideoDataset):
                     camid = self._parse_camid(cam_dir)
                     self._discover_tracklets(cam_path, pid, camid, modality)
 
+    def _relabel_pids(self):
+        """Map raw person IDs to contiguous training labels starting at 0."""
+        unique_pids = sorted({sample["pid"] for sample in self.samples})
+        self.pid2label = {pid: idx for idx, pid in enumerate(unique_pids)}
+        self.label2pid = {idx: pid for pid, idx in self.pid2label.items()}
+        for sample in self.samples:
+            sample["raw_pid"] = sample["pid"]
+            sample["pid"] = self.pid2label[sample["pid"]]
+
     def __len__(self):
         return len(self.samples)
 
@@ -145,9 +161,6 @@ class HITSZVCM(BaseVideoDataset):
         start = random.randint(0, n_frames - self.seq_len)
         selected_paths = frame_paths[start:start + self.seq_len]
 
-        from PIL import Image
-        import torchvision.transforms.functional as F
-
         frames = []
         for path in selected_paths:
             img = Image.open(path).convert("RGB")
@@ -158,7 +171,6 @@ class HITSZVCM(BaseVideoDataset):
         else:
             frames = [F.to_tensor(f) for f in frames]
 
-        import torch
         frames_tensor = torch.stack(frames, dim=0)
 
         return {
