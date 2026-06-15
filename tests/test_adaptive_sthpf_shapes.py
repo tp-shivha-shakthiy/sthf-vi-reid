@@ -4,7 +4,7 @@ from models.adaptive_sthpf import AdaptiveSTHPF
 
 
 class TestAdaptiveSTHPF:
-    def test_branch_output_shapes(self):
+    def test_branch_output_shapes_5d(self):
         model = AdaptiveSTHPF()
         x = torch.randn(2, 6, 3, 288, 144)
 
@@ -16,34 +16,37 @@ class TestAdaptiveSTHPF:
         assert paper_out.shape == x.shape
         assert strong_out.shape == x.shape
 
-    def test_fusion_output_shape(self):
+    def test_gate_output_shape(self):
+        model = AdaptiveSTHPF()
+        x = torch.randn(4, 6, 3, 288, 144)
+        _ = model(x)
+        w = model.latest_gate_weights
+        assert w.shape == (4, 3)
+
+    def test_softmax_constraint(self):
+        model = AdaptiveSTHPF()
+        x = torch.randn(4, 6, 3, 288, 144)
+        _ = model(x)
+        w = model.latest_gate_weights
+        assert torch.allclose(w.sum(dim=1), torch.ones(4), atol=1e-6)
+
+    def test_adaptive_output_shape_5d(self):
         model = AdaptiveSTHPF()
         x = torch.randn(2, 6, 3, 288, 144)
-        output = model(x)
-        assert output.shape == x.shape
+        out = model(x)
+        assert out.shape == x.shape
 
     def test_multi_branch_routing(self):
         model = AdaptiveSTHPF()
         x = torch.randn(2, 6, 3, 288, 144)
-        output = model(x)
-        assert torch.isfinite(output).all()
+        out = model(x)
+        assert torch.isfinite(out).all()
+        assert model.latest_gate_weights is not None
 
-    def test_gate_placeholder(self):
+    def test_gate_is_not_placeholder(self):
         model = AdaptiveSTHPF()
-        assert model.gate is None
-
-    def test_fusion_differs_from_single_branch(self):
-        model = AdaptiveSTHPF()
-        model.eval()
-        x = torch.randn(2, 6, 3, 288, 144)
-
-        with torch.no_grad():
-            fused = model(x)
-            weak = model.weak_branch(x)
-
-        assert not torch.allclose(fused, weak, atol=1e-6), (
-            "Fused output should differ from any single branch output"
-        )
+        assert model.gate is not None
+        assert hasattr(model.gate, "parameters")
 
     def test_all_branches_have_correct_cutoffs(self):
         model = AdaptiveSTHPF()
@@ -53,3 +56,17 @@ class TestAdaptiveSTHPF:
         assert model.paper_branch.ft == 2
         assert model.strong_branch.fs == 15
         assert model.strong_branch.ft == 2
+
+    def test_fusion_differs_from_equal_average(self):
+        model = AdaptiveSTHPF()
+        model.eval()
+        x = torch.randn(2, 6, 3, 288, 144)
+        with torch.no_grad():
+            weak = model.weak_branch(x)
+            paper = model.paper_branch(x)
+            strong = model.strong_branch(x)
+            avg = (weak + paper + strong) / 3.0
+            adaptive = model(x)
+        assert not torch.allclose(adaptive, avg, atol=1e-6), (
+            "Adaptive fusion should differ from simple average"
+        )
