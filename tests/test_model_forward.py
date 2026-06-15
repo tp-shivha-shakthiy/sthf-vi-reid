@@ -2,6 +2,7 @@ import torch
 import pytest
 
 from models.baseline import BaselineModel
+from models.sdc import SDC
 from models.sthf_model import STHFModel
 from models.sthpf import FixedSTHPF
 from models.modality_purifier import ModalityPurifier, ChannelAttention
@@ -167,3 +168,69 @@ def test_sthf_model_has_sthpf_in_extra():
     outputs = model(frames)
 
     assert outputs["extra"]["sthpf_type"] == "fixed"
+
+
+class TestSDC:
+    def test_accepts_valid_tensors(self):
+        sdc = SDC(feature_dim=2048)
+        original_feat = torch.randn(2, 2048)
+        high_freq_feat = torch.randn(2, 2048)
+        output = sdc(original_feat, high_freq_feat)
+        assert output.shape == original_feat.shape
+
+    def test_preserves_shape(self):
+        sdc = SDC(feature_dim=2048)
+        original_feat = torch.randn(4, 2048)
+        high_freq_feat = torch.randn(4, 2048)
+        output = sdc(original_feat, high_freq_feat)
+        assert output.shape == (4, 2048)
+
+    def test_channel_alignment_different_dims(self):
+        sdc = SDC(feature_dim=2048)
+        original_feat = torch.randn(2, 2048)
+        high_freq_feat = torch.randn(2, 512)
+        output = sdc(original_feat, high_freq_feat)
+        assert output.shape == original_feat.shape
+
+    def test_4d_channel_alignment(self):
+        sdc = SDC(feature_dim=256)
+        original_feat = torch.randn(2, 256, 7, 7)
+        high_freq_feat = torch.randn(2, 128, 7, 7)
+        output = sdc(original_feat, high_freq_feat)
+        assert output.shape == original_feat.shape
+
+    def test_forward_no_error(self):
+        sdc = SDC(feature_dim=2048)
+        original_feat = torch.randn(2, 2048)
+        high_freq_feat = torch.randn(2, 2048)
+        output = sdc(original_feat, high_freq_feat)
+        assert torch.isfinite(output).all()
+
+    def test_values_modified(self):
+        sdc = SDC(feature_dim=2048)
+        original_feat = torch.randn(2, 2048)
+        high_freq_feat = torch.randn(2, 2048)
+        sdc.eval()
+        with torch.no_grad():
+            output = sdc(original_feat, high_freq_feat)
+        assert not torch.allclose(original_feat, output, atol=1e-6)
+
+
+def test_sthf_model_includes_sdc():
+    model = STHFModel(num_classes=10, pretrained=False, sthpf_type="fixed")
+    assert hasattr(model, "sdc")
+    assert isinstance(model.sdc, SDC)
+
+
+def test_sthf_forward_with_sdc_executes():
+    model = STHFModel(num_classes=10, pretrained=False, sthpf_type="fixed")
+    frames = torch.randn(2, 6, 3, 288, 144)
+    outputs = model(frames)
+    assert "features" in outputs
+    assert "logits" in outputs
+    assert "int_features" in outputs
+    assert "int_logits" in outputs
+    assert outputs["features"].shape == (2, 2048)
+    assert outputs["logits"].shape == (2, 10)
+    assert outputs["int_features"].shape == (2, 2048)
+    assert outputs["int_logits"].shape == (2, 10)

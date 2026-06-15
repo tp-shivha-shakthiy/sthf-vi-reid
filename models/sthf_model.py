@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 from models.resnet_backbone import ResNet50VideoBackbone
+from models.sdc import SDC
 from models.sthpf import FixedSTHPF
 
 
@@ -45,10 +46,10 @@ class STHFModel(nn.Module):
 
         self.classifier = nn.Linear(feature_dim, num_classes)
         self.int_classifier = nn.Linear(feature_dim, num_classes)
+        self.sdc = SDC(feature_dim=actual_dim)
 
     def forward(self, frames: torch.Tensor, modalities=None):
         features = self.original_backbone(frames)
-        logits = self.classifier(features)
 
         if self.sthpf is not None:
             high_freq_frames = self.sthpf(frames)
@@ -56,7 +57,10 @@ class STHFModel(nn.Module):
         else:
             int_features = self.intermediate_backbone(frames)
 
-        int_logits = self.int_classifier(int_features)
+        compensated_feat = self.sdc(features, int_features)
+
+        logits = self.classifier(compensated_feat)
+        int_logits = self.int_classifier(compensated_feat)
 
         extra = {
             "model_type": f"sthf_{self.sthpf_type}",
