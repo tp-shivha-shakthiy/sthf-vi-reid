@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+from models.dsr import DSR
 from models.resnet_backbone import ResNet50VideoBackbone
 from models.sdc import SDC
 from models.sthpf import FixedSTHPF
@@ -13,10 +14,11 @@ class STHFModel(nn.Module):
     Contains:
         - original video branch
         - high-frequency branch with ST-HPF
+        - SDC for feature compensation
+        - DSR for temporal structural refinement
         - classifiers for both branches
 
     The ST-HPF module is applied to frames before the intermediate backbone.
-    Modality Purifier, SDC, and DSR will be added in later phases.
     """
 
     def __init__(
@@ -47,20 +49,27 @@ class STHFModel(nn.Module):
         self.classifier = nn.Linear(feature_dim, num_classes)
         self.int_classifier = nn.Linear(feature_dim, num_classes)
         self.sdc = SDC(feature_dim=actual_dim)
+        self.dsr = DSR(feature_dim=actual_dim)
 
     def forward(self, frames: torch.Tensor, modalities=None):
-        features = self.original_backbone(frames)
+        original_seq = self.original_backbone.forward_sequence(frames)
+        features = original_seq.mean(dim=1)
 
         if self.sthpf is not None:
             high_freq_frames = self.sthpf(frames)
-            int_features = self.intermediate_backbone(high_freq_frames)
+            hf_seq = self.intermediate_backbone.forward_sequence(high_freq_frames)
         else:
-            int_features = self.intermediate_backbone(frames)
+            hf_seq = self.intermediate_backbone.forward_sequence(frames)
+
+        int_features = hf_seq.mean(dim=1)
 
         compensated_feat = self.sdc(features, int_features)
 
-        logits = self.classifier(compensated_feat)
-        int_logits = self.int_classifier(compensated_feat)
+        refined_seq = self.dsr(original_seq, hf_seq)
+        refined = refined_seq.mean(dim=1)
+
+        logits = self.classifier(refined)
+        int_logits = self.int_classifier(refined)
 
         extra = {
             "model_type": f"sthf_{self.sthpf_type}",
