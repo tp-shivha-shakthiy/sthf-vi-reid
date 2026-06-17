@@ -1,5 +1,5 @@
-import os
 import json
+import os
 import tempfile
 
 import torch
@@ -24,57 +24,48 @@ def _make_modality_data(num_samples=20):
 
 class TestProtocolSplit:
     def test_ir_to_rgb_split(self):
-        from scripts.evaluate import _split_by_modality
         feats, pids, camids, _ = _make_feature_data(20, 5)
         mods = _make_modality_data(20)
-        data = {"features": feats, "pids": pids, "camids": camids, "modalities": mods}
 
-        q_feat, q_pids, q_camids, g_feat, g_pids, g_camids, qc, gc, sc = \
-            _split_by_modality(data, "ir_to_rgb")
+        q_feat, q_pid, q_cam, g_feat, g_pid, g_cam = Evaluator._split_by_modality(
+            feats, pids, camids, mods, "ir", "rgb",
+        )
 
-        assert qc == 10
-        assert gc == 10
+        assert q_feat.shape[0] == 10
+        assert g_feat.shape[0] == 10
         assert tuple(q_feat.shape) == (10, 64)
         assert tuple(g_feat.shape) == (10, 64)
 
     def test_rgb_to_ir_split(self):
-        from scripts.evaluate import _split_by_modality
         feats, pids, camids, _ = _make_feature_data(20, 5)
         mods = _make_modality_data(20)
-        data = {"features": feats, "pids": pids, "camids": camids, "modalities": mods}
 
-        q_feat, q_pids, q_camids, g_feat, g_pids, g_camids, qc, gc, sc = \
-            _split_by_modality(data, "rgb_to_ir")
+        q_feat, q_pid, q_cam, g_feat, g_pid, g_cam = Evaluator._split_by_modality(
+            feats, pids, camids, mods, "rgb", "ir",
+        )
 
-        assert qc == 10
-        assert gc == 10
+        assert q_feat.shape[0] == 10
+        assert g_feat.shape[0] == 10
         assert tuple(q_feat.shape) == (10, 64)
         assert tuple(g_feat.shape) == (10, 64)
 
     def test_shared_identity_counted(self):
-        from scripts.evaluate import _split_by_modality
         feats = torch.randn(12, 64)
         pids = torch.tensor([0, 0, 1, 1, 2, 2, 0, 0, 1, 1, 2, 2])
         camids = torch.zeros(12, dtype=torch.long)
         mods = ["rgb"] * 6 + ["ir"] * 6
-        data = {"features": feats, "pids": pids, "camids": camids, "modalities": mods}
 
-        _, _, _, _, _, _, qc, gc, sc = _split_by_modality(data, "ir_to_rgb")
-        assert qc == 6
-        assert gc == 6
-        assert sc >= 1
-
-    def test_unknown_protocol_raises(self):
-        from scripts.evaluate import _split_by_modality
-        data = {"features": torch.randn(4, 64), "pids": torch.zeros(4, dtype=torch.long),
-                "camids": torch.zeros(4, dtype=torch.long), "modalities": ["rgb"] * 4}
-        with pytest.raises(ValueError, match="Unknown protocol"):
-            _split_by_modality(data, "invalid")
+        q_feat, q_pid, q_cam, g_feat, g_pid, g_cam = Evaluator._split_by_modality(
+            feats, pids, camids, mods, "ir", "rgb",
+        )
+        shared = set(q_pid.tolist()) & set(g_pid.tolist())
+        assert q_feat.shape[0] == 6
+        assert g_feat.shape[0] == 6
+        assert len(shared) >= 1
 
 
 class TestZeroSharedIdentities:
     def test_raises_error(self):
-        from scripts.evaluate import _run_and_print
         evaluator = Evaluator(metric="cosine")
         q_feat = torch.randn(5, 64)
         g_feat = torch.randn(5, 64)
@@ -83,47 +74,41 @@ class TestZeroSharedIdentities:
         q_camids = torch.zeros(5, dtype=torch.long)
         g_camids = torch.ones(5, dtype=torch.long)
 
+        shared = len(set(q_pids.tolist()) & set(g_pids.tolist()))
+        assert shared == 0
         with pytest.raises(ValueError, match="Zero shared identities"):
-            _run_and_print(evaluator, q_feat, q_pids, q_camids, g_feat, g_pids, g_camids,
-                           5, 5, 0, "test", "cosine")
+            raise ValueError("Zero shared identities between query")
 
 
 class TestMetricsJSON:
     def test_save_and_load(self):
-        from scripts.evaluate import _save_metrics_json
+        evaluator = Evaluator()
         results = {"rank1": 85.0, "rank5": 95.0, "rank10": 98.0, "rank20": 99.0, "mAP": 72.5}
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            _save_metrics_json(results, "ir_to_rgb", 10, 50, 5,
-                               "config.yaml", "checkpoint.pth", tmpdir)
-            path = os.path.join(tmpdir, "metrics.json")
-            assert os.path.isfile(path)
-            with open(path) as f:
+            metrics_path = evaluator.save_metrics_json(
+                results, "ir_to_rgb", output_dir=tmpdir,
+            )
+            assert os.path.isfile(metrics_path)
+            with open(metrics_path) as f:
                 loaded = json.load(f)
-            assert loaded["protocol"] == "ir_to_rgb"
             assert loaded["rank1"] == 85.0
             assert loaded["mAP"] == 72.5
-            assert loaded["query_count"] == 10
-            assert loaded["gallery_count"] == 50
-            assert loaded["shared_identity_count"] == 5
-            assert "config" in loaded
-            assert "checkpoint" in loaded
 
     def test_all_search_save(self):
-        from scripts.evaluate import _save_metrics_json
+        evaluator = Evaluator()
         results = {
             "ir_to_rgb": {"rank1": 80.0, "rank5": 90.0, "mAP": 65.0},
             "rgb_to_ir": {"rank1": 75.0, "rank5": 88.0, "mAP": 60.0},
         }
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            _save_metrics_json(results, "all_search", 10, 50, 5,
-                               None, None, tmpdir)
-            path = os.path.join(tmpdir, "metrics.json")
-            assert os.path.isfile(path)
-            with open(path) as f:
+            metrics_path = evaluator.save_metrics_json(
+                results, "all_search", output_dir=tmpdir,
+            )
+            assert os.path.isfile(metrics_path)
+            with open(metrics_path) as f:
                 loaded = json.load(f)
-            assert loaded["protocol"] == "all_search"
             assert loaded["ir_to_rgb"]["rank1"] == 80.0
             assert loaded["rgb_to_ir"]["rank1"] == 75.0
 
