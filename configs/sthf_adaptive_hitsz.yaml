@@ -18,35 +18,21 @@ model:
   feature_dim: 2048
   num_classes: 500
   sthf_mode: adaptive
-
-<<<<<<< Updated upstream
-=======
-<<<<<<< Updated upstream
-=======
   sthpf:
     type: adaptive
-
->>>>>>> Stashed changes
   adaptive_sthpf:
     enabled: true
-
     branches:
       weak:
         fs: 5
         ft: 1
-
       paper:
         fs: 10
         ft: 2
-
       strong:
         fs: 15
         ft: 2
 
-<<<<<<< Updated upstream
-=======
->>>>>>> Stashed changes
->>>>>>> Stashed changes
 loss:
   lambda_id: 1.0
   lambda_tri: 1.0

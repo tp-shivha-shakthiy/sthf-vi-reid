@@ -111,60 +111,57 @@ class TestSDC:
 
 
 # ======================================================================
-# DSR tests — must accept 5D sequence feature maps
+# DSR tests — operates on [B, T, C] sequence features
 # ======================================================================
 
 class TestDSR:
-    def test_accepts_5d_sequence_features(self):
-        dsr = DSR(in_channels=1024)
-        F_orig = torch.randn(2, 1024, 6, 9, 18)
-        F_hf = torch.randn(2, 1024, 6, 9, 18)
-        output = dsr(F_orig, F_hf)
-        assert output.shape == F_orig.shape
+    def test_accepts_3d_sequence_features(self):
+        dsr = DSR(feature_dim=2048)
+        orig_seq = torch.randn(2, 6, 2048)
+        hf_seq = torch.randn(2, 6, 2048)
+        output = dsr(orig_seq, hf_seq)
+        assert output.shape == orig_seq.shape
 
-    def test_output_is_5d(self):
-        dsr = DSR(in_channels=1024)
-        F_orig = torch.randn(2, 1024, 6, 9, 18)
-        F_hf = torch.randn(2, 1024, 6, 9, 18)
-        output = dsr(F_orig, F_hf)
-        assert output.ndim == 5
+    def test_output_is_3d(self):
+        dsr = DSR(feature_dim=2048)
+        orig_seq = torch.randn(2, 6, 2048)
+        hf_seq = torch.randn(2, 6, 2048)
+        output = dsr(orig_seq, hf_seq)
+        assert output.ndim == 3
 
     def test_preserves_dims(self):
-        dsr = DSR(in_channels=1024)
-        F_orig = torch.randn(2, 1024, 6, 9, 18)
-        F_hf = torch.randn(2, 1024, 6, 9, 18)
-        output = dsr(F_orig, F_hf)
-        assert output.shape == F_orig.shape
+        dsr = DSR(feature_dim=2048)
+        orig_seq = torch.randn(2, 6, 2048)
+        hf_seq = torch.randn(2, 6, 2048)
+        output = dsr(orig_seq, hf_seq)
+        assert output.shape == orig_seq.shape
 
     def test_forward_no_error(self):
-        dsr = DSR(in_channels=1024)
-        F_orig = torch.randn(2, 1024, 6, 9, 18)
-        F_hf = torch.randn(2, 1024, 6, 9, 18)
-        output = dsr(F_orig, F_hf)
+        dsr = DSR(feature_dim=2048)
+        orig_seq = torch.randn(2, 6, 2048)
+        hf_seq = torch.randn(2, 6, 2048)
+        output = dsr(orig_seq, hf_seq)
         assert torch.isfinite(output).all()
 
     def test_values_modified(self):
-        dsr = DSR(in_channels=1024)
-        F_orig = torch.randn(2, 1024, 6, 9, 18)
-        F_hf = torch.randn(2, 1024, 6, 9, 18)
+        dsr = DSR(feature_dim=2048)
+        orig_seq = torch.randn(2, 6, 2048)
+        hf_seq = torch.randn(2, 6, 2048)
         dsr.eval()
         with torch.no_grad():
-            output = dsr(F_orig, F_hf)
-        assert not torch.allclose(F_orig, output, atol=1e-6)
+            output = dsr(orig_seq, hf_seq)
+        assert not torch.allclose(orig_seq, output, atol=1e-6)
 
-    def test_uses_3d_conv(self):
-        dsr = DSR(in_channels=1024)
-        assert isinstance(dsr.phi_q, torch.nn.Conv3d)
-        assert isinstance(dsr.phi_k, torch.nn.Conv3d)
-        assert isinstance(dsr.phi_v, torch.nn.Conv3d)
+    def test_uses_conv1d(self):
+        dsr = DSR(feature_dim=2048)
+        assert isinstance(dsr.temporal_fusion[0], torch.nn.Conv1d)
 
-    def test_dsr2_2048_channels(self):
-        """DSR after layer4 must handle 2048-channel sequence feature maps."""
-        dsr = DSR(in_channels=2048)
-        F_orig = torch.randn(2, 2048, 6, 5, 9)
-        F_hf = torch.randn(2, 2048, 6, 5, 9)
-        output = dsr(F_orig, F_hf)
-        assert output.shape == F_orig.shape
+    def test_dsr_feature_dim_2048(self):
+        dsr = DSR(feature_dim=2048)
+        orig_seq = torch.randn(2, 6, 2048)
+        hf_seq = torch.randn(2, 6, 2048)
+        output = dsr(orig_seq, hf_seq)
+        assert output.shape[-1] == 2048
 
 
 # ======================================================================
@@ -204,68 +201,48 @@ class TestSTHFArchitectureWiring:
         assert outputs["int_features"].shape == (2, 2048)
         assert outputs["int_logits"].shape == (2, 10)
 
-    # --- Dual SDC placement ---
+    # --- SDC placement ---
 
-    def test_sdc1_exists_256_channels(self):
-        """sdc1 must exist with in_channels=256 (layer1 output)."""
+    def test_sdc_exists_256_channels(self):
+        """sdc must exist with in_channels=256 (layer1 output)."""
         model = STHFModel(num_classes=10, pretrained=False, sthpf_type="fixed")
-        assert hasattr(model, "sdc1")
-        assert isinstance(model.sdc1, SDC)
-        assert model.sdc1.in_channels == 256
+        assert hasattr(model, "sdc")
+        assert isinstance(model.sdc, SDC)
+        assert model.sdc.in_channels == 256
 
-    def test_sdc2_exists_512_channels(self):
-        """sdc2 must exist with in_channels=512 (layer2 output)."""
+    # --- DSR placement ---
+
+    def test_dsr_exists(self):
+        """dsr must exist with feature_dim=2048."""
         model = STHFModel(num_classes=10, pretrained=False, sthpf_type="fixed")
-        assert hasattr(model, "sdc2")
-        assert isinstance(model.sdc2, SDC)
-        assert model.sdc2.in_channels == 512
+        assert hasattr(model, "dsr")
+        assert isinstance(model.dsr, DSR)
 
-    # --- Dual DSR placement ---
+    # --- SDC called after layer1 ---
 
-    def test_dsr1_exists_1024_channels(self):
-        """dsr1 must exist with in_channels=1024 (layer3 output)."""
-        model = STHFModel(num_classes=10, pretrained=False, sthpf_type="fixed")
-        assert hasattr(model, "dsr1")
-        assert isinstance(model.dsr1, DSR)
-        assert model.dsr1.in_channels == 1024
-
-    def test_dsr2_exists_2048_channels(self):
-        """dsr2 must exist with in_channels=2048 (layer4 output)."""
-        model = STHFModel(num_classes=10, pretrained=False, sthpf_type="fixed")
-        assert hasattr(model, "dsr2")
-        assert isinstance(model.dsr2, DSR)
-        assert model.dsr2.in_channels == 2048
-
-    # --- SDC called after both layer1 and layer2 ---
-
-    def test_sdc_called_after_layer1_and_layer2(self):
-        """SDC must be invoked in the forward path after both layer1 and layer2."""
+    def test_sdc_called_after_layer1(self):
+        """SDC must be invoked in the forward path after layer1."""
         import inspect
         source = inspect.getsource(STHFModel.forward)
-        # sdc1 called after layer1
-        assert "self.sdc1(" in source, "sdc1 not called in forward"
-        # sdc2 called after layer2
-        assert "self.sdc2(" in source, "sdc2 not called in forward"
+        assert "self.sdc(" in source, "sdc not called in forward"
 
-    # --- DSR called after both layer3 and layer4 ---
+    # --- DSR called on sequence features ---
 
-    def test_dsr_called_after_layer3_and_layer4(self):
-        """DSR must be invoked in the forward path after both layer3 and layer4."""
+    def test_dsr_called_on_sequence(self):
+        """DSR must be invoked on [B, T, C] sequence features."""
         import inspect
         source = inspect.getsource(STHFModel.forward)
-        assert "self.dsr1(" in source, "dsr1 not called in forward"
-        assert "self.dsr2(" in source, "dsr2 not called in forward"
+        assert "self.dsr(" in source, "dsr not called in forward"
 
-    # --- Final features come after DSR2, GAP, BN ---
+    # --- Final features come after DSR, GAP, BN ---
 
-    def test_features_after_dsr2_gap_bn(self):
-        """output['features'] must come from original branch after dsr2 -> pool -> final_bn."""
+    def test_features_after_pool_bn(self):
+        """output['features'] must come from pool + final_bn."""
         import inspect
         source = inspect.getsource(STHFModel.forward)
-        # Features must be computed from orig_pooled which comes from pool + final_bn
-        assert "backbone.pool(orig_refined_4d_4)" in source
-        assert "backbone.final_bn(orig_pooled)" in source
-        assert "features = orig_pooled.flatten" in source
+        assert "backbone.pool(orig_" in source
+        assert "backbone.final_bn(orig_" in source
+        assert "features = refined_seq.mean" in source
 
     # --- No shortcut feature fusion ---
 
