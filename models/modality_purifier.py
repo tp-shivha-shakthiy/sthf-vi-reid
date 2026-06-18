@@ -2,52 +2,64 @@ import torch
 import torch.nn as nn
 
 
-class ChannelAttention(nn.Module):
-    """Squeeze-and-Excitation channel attention module."""
-
-    def __init__(self, num_channels, reduction=16):
-        super().__init__()
-        hidden = max(num_channels // reduction, 16)
-        self.fc = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(),
-            nn.Linear(num_channels, hidden),
-            nn.ReLU(inplace=True),
-            nn.Linear(hidden, num_channels),
-            nn.Sigmoid(),
-        )
-
-    def forward(self, x):
-        scale = self.fc(x).view(x.size(0), x.size(1), 1, 1)
-        return x * scale
-
-
 class ModalityPurifier(nn.Module):
-    """Suppresses modality-specific style noise via Instance Normalization
-    and Channel Attention.
+    """Modality Purifier (MP) — paper formula:
+
+        fp = mc * f + (1 - mc) * IN(f)
+
+    where:
+        mc = sigmoid(W2(ReLU(W1(GAP(f)))))
 
     Supports both:
-      - 4D input: [B*T, C, H, W]  (batch–time flattened feature maps)
-      - 5D input: [B, T, C, H, W] (temporal feature maps)
+      - 4D input: [N, C, H, W]   (single-frame feature maps)
+      - 5D input: [B, T, C, H, W] (temporal feature maps, processed per-frame)
 
     Output shape always matches input shape.
     """
 
-    def __init__(self, num_channels=2048):
+    def __init__(self, num_channels: int = 2048, reduction: int = 16):
         super().__init__()
+        hidden = max(num_channels // reduction, 16)
         self.instance_norm = nn.InstanceNorm2d(num_channels, affine=True)
-        self.channel_attention = ChannelAttention(num_channels)
+        # W1: C → hidden,  W2: hidden → C
+        self.fc1 = nn.Linear(num_channels, hidden)
+        self.relu = nn.ReLU(inplace=True)
+        self.fc2 = nn.Linear(hidden, num_channels)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.ndim == 5:
             B, T, C, H, W = x.shape
-            x = x.view(B * T, C, H, W)
-            x = self.instance_norm(x)
-            x = self.channel_attention(x)
-            return x.view(B, T, C, H, W)
+            x_flat = x.reshape(B * T, C, H, W)
+            out = self._forward_4d(x_flat)
+            return out.reshape(B, T, C, H, W)
         elif x.ndim == 4:
-            return self.channel_attention(self.instance_norm(x))
+            return self._forward_4d(x)
         else:
             raise ValueError(
                 f"Expected 4D or 5D input, got {x.ndim}D with shape {x.shape}"
             )
+
+    def _forward_4d(self, x: torch.Tensor) -> torch.Tensor:
+        """Core MP computation on 4D [N, C, H, W] tensors.
+
+        fp = mc * f + (1 - mc) * IN(f)
+        mc = sigmoid(W2(ReLU(W1(GAP(f)))))
+        """
+        N, C, H, W = x.shape
+
+        # IN(f)
+        x_in = self.instance_norm(x)
+
+        # GAP(f) → [N, C]
+        gap = x.mean(dim=(2, 3))
+
+        # mc = sigmoid(W2(ReLU(W1(GAP(f))))) → [N, C]
+        mc = self.fc2(self.relu(self.fc1(gap)))
+        mc = torch.sigmoid(mc)
+
+        # Reshape mc for broadcasting: [N, C, 1, 1]
+        mc = mc.view(N, C, 1, 1)
+
+        # fp = mc * f + (1 - mc) * IN(f)
+        fp = mc * x + (1.0 - mc) * x_in
+        return fp

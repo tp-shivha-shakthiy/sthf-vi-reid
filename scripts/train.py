@@ -9,8 +9,9 @@ from torch.utils.data import DataLoader
 from models.baseline import BaselineModel
 from models.sthf_model import STHFModel
 from data.hitsz_vcm import HITSZVCM
-from data.transforms import get_video_transforms
+from data.transforms import get_video_transforms, build_caj
 from data.collate import collate_video_fn
+from data.video_sampler import VideoSampler
 from losses.build_loss import build_loss
 from engine.trainer import Trainer
 
@@ -53,6 +54,8 @@ def main():
                         help="Use real HITSZ-VCM batches instead of dummy tensors")
     parser.add_argument("--epochs", type=int, default=None,
                         help="Override training epochs (default: config value)")
+    parser.add_argument("--max-batches", type=int, default=None,
+                        help="Stop after N batches per epoch (smoke test)")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -73,7 +76,8 @@ def main():
     criterion = build_loss(config)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-    trainer = Trainer(model, criterion, optimizer, scheduler, config)
+    caj = build_caj(config.get("augmentation", {}).get("caj"))
+    trainer = Trainer(model, criterion, optimizer, scheduler, config, caj=caj)
 
     root = data_cfg.get("root", "./data/hitsz_vcm")
 
@@ -86,12 +90,24 @@ def main():
         transform = get_video_transforms(mode="train", img_size=img_size)
         dataset = HITSZVCM(root=root, seq_len=sequence_length,
                            transform=transform, split="train")
+
+        sampling_cfg = config.get("sampling", {})
+        num_ids = sampling_cfg.get("num_ids", 4)
+        clips_per_id = sampling_cfg.get("clips_per_id", 4)
+
+        sampler = VideoSampler(
+            dataset,
+            num_ids=num_ids,
+            clips_per_id=clips_per_id,
+            shuffle=True,
+        )
         loader = DataLoader(
             dataset,
-            batch_size=batch_size,
-            shuffle=True,
+            batch_sampler=sampler,
             collate_fn=collate_video_fn,
         )
+
+        print(f"  VideoSampler: {num_ids} ids × {clips_per_id} clips = {num_ids * clips_per_id} per batch")
 
         print(f"Real dataset loaded: {len(dataset)} tracklets")
         batch = next(iter(loader))
@@ -111,16 +127,24 @@ def main():
     if args.debug:
         losses = trainer.training_step(batch)
         print("Debug training step completed successfully.")
-        print(f"  id_loss:           {losses['id_loss'].item():.6f}")
-        print(f"  triplet_loss:      {losses['triplet_loss'].item():.6f}")
-        print(f"  int_id_loss:       {losses['int_id_loss'].item():.6f}")
-        print(f"  int_triplet_loss:  {losses['int_triplet_loss'].item():.6f}")
-        print(f"  total:             {losses['total'].item():.6f}")
+        print(f"  loss_id:           {losses['loss_id'].item():.6f}")
+        print(f"  loss_tri:          {losses['loss_tri'].item():.6f}")
+        print(f"  loss_id_int:       {losses['loss_id_int'].item():.6f}")
+        print(f"  loss_tri_int:      {losses['loss_tri_int'].item():.6f}")
+        print(f"  loss_total:        {losses['loss_total'].item():.6f}")
     elif args.real_data:
         if epochs < 200:
             print("WARNING: Running with fewer than 200 epochs — results are preliminary, not full reproduction.")
         print(f"Training {model_name} for {epochs} epochs (lr={lr}, batch_size={batch_size})")
         trainer.fit(loader, None, epochs)
+
+        save_dir = train_cfg.get("save_dir", f"experiments/{model_name}")
+        final_path = os.path.join(save_dir, "last.pth")
+        torch.save(model.state_dict(), final_path)
+        print(f"Final model weights saved to {final_path}")
+        if args.max_batches is not None:
+            print(f"  Smoke-test mode: max {args.max_batches} batch(es) per epoch")
+        trainer.fit(loader, None, epochs, max_batches=args.max_batches)
     else:
         print("Use --debug for a single step or --real-data for full training.")
         sys.exit(1)

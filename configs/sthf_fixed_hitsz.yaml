@@ -35,6 +35,12 @@ loss:
   lambda_int_id: 1.0
   lambda_int_tri: 1.0
 
+augmentation:
+  caj:
+    enabled: true
+    alpha: 1.0
+    prob: 0.5
+
 train:
   epochs: 200
   lr: 0.00035

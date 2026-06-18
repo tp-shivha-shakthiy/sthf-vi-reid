@@ -34,7 +34,7 @@ def test_combined_loss_keys():
     }
     pids = torch.tensor([0, 0, 1, 1])
     losses = criterion(outputs, pids)
-    expected_keys = {"total", "id_loss", "triplet_loss", "int_id_loss", "int_triplet_loss"}
+    expected_keys = {"loss_total", "loss_id", "loss_tri", "loss_id_int", "loss_tri_int"}
     assert set(losses.keys()) == expected_keys
 
 
@@ -49,8 +49,8 @@ def test_baseline_int_losses_zero():
     }
     pids = torch.tensor([0, 0, 1, 1])
     losses = criterion(outputs, pids)
-    assert losses["int_id_loss"].item() == 0.0
-    assert losses["int_triplet_loss"].item() == 0.0
+    assert losses["loss_id_int"].item() == 0.0
+    assert losses["loss_tri_int"].item() == 0.0
 
 
 def test_total_loss_finite():
@@ -64,4 +64,4 @@ def test_total_loss_finite():
     }
     pids = torch.tensor([0, 0, 1, 1])
     losses = criterion(outputs, pids)
-    assert torch.isfinite(losses["total"])
+    assert torch.isfinite(losses["loss_total"])

@@ -79,12 +79,27 @@ class TestDatasetMissingPath:
         assert "Split directory not found" in str(excinfo.value)
         assert "/nonexistent/path" in str(excinfo.value)
 
-    def test_sanity_check_script_fails_on_missing_root(self):
+    def test_sanity_check_script_fails_on_missing_root(self, tmp_path):
         import subprocess
+
+        cfg_path = "configs/baseline_hitsz.yaml"
+        with open(cfg_path, "r") as f:
+            cfg = yaml.safe_load(f)
+
+        missing_root = str(tmp_path / "definitely_missing_hitsz_vcm")
+        cfg["data"]["root"] = missing_root
+
+        temp_cfg = tmp_path / "temp_baseline_hitsz.yaml"
+        with open(temp_cfg, "w") as f:
+            yaml.dump(cfg, f)
+
         result = subprocess.run(
             ["python", "scripts/sanity_check_dataset.py",
-             "--config", "configs/baseline_hitsz.yaml"],
+             "--config", str(temp_cfg)],
             capture_output=True, text=True,
         )
-        assert result.returncode != 0
-        assert "Dataset not found at" in result.stdout
+        assert result.returncode != 0, (
+            f"Expected non-zero return, got {result.returncode}.\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+        assert "Dataset not found at" in (result.stdout + result.stderr)
