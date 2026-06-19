@@ -1,16 +1,9 @@
-# Baseline configuration for HITSZ-VCM dataset
-# Reproduces the paper's baseline settings.
-
 data:
   root: ./data/hitsz_vcm
   batch_size: 16
   num_workers: 4
   seq_len: 6
   img_size: [288, 144]
-
-sampling:
-  num_ids: 4
-  clips_per_id: 4
 
 model:
   name: baseline
@@ -23,10 +16,6 @@ loss:
   lambda_tri: 1.0
   lambda_int_id: 1.0
   lambda_int_tri: 1.0
-
-augmentation:
-  caj:
-    enabled: false
 
 train:
   epochs: 200

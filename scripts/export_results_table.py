@@ -10,10 +10,12 @@ COLUMNS = [
     "ir_to_rgb_rank1",
     "ir_to_rgb_rank5",
     "ir_to_rgb_rank10",
+    "ir_to_rgb_rank20",
     "ir_to_rgb_mAP",
     "rgb_to_ir_rank1",
     "rgb_to_ir_rank5",
     "rgb_to_ir_rank10",
+    "rgb_to_ir_rank20",
     "rgb_to_ir_mAP",
 ]
 
