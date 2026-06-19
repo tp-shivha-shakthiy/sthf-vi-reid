@@ -43,9 +43,15 @@ class STHFModel(nn.Module):
     def forward(self, frames: torch.Tensor, modalities=None):
         b, t, c, h, w = frames.shape
         backbone = self.backbone
+        extra_metadata = {}
 
         if self.sthpf is not None:
-            high_freq_frames = self.sthpf(frames)
+            sthpf_out = self.sthpf(frames)
+            if isinstance(sthpf_out, dict):
+                high_freq_frames = sthpf_out["features"]
+                extra_metadata = sthpf_out.get("metadata", {})
+            else:
+                high_freq_frames = sthpf_out
         else:
             high_freq_frames = frames
 
@@ -84,13 +90,7 @@ class STHFModel(nn.Module):
             "model_type": f"sthf_{self.sthpf_type}",
             "sthpf_type": self.sthpf_type,
         }
-
-        if (
-            self.sthpf_type == "adaptive"
-            and isinstance(self.sthpf, AdaptiveSTHPF)
-            and self.sthpf.latest_gate_weights is not None
-        ):
-            extra["filter_weights"] = self.sthpf.latest_gate_weights
+        extra.update(extra_metadata)
 
         return {
             "features": features,

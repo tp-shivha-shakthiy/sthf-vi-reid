@@ -20,6 +20,8 @@ model:
   sthf_mode: adaptive
   sthpf:
     type: adaptive
+    return_metadata: true
+    expose_filter_weights: true
   adaptive_sthpf:
     enabled: true
     branches:

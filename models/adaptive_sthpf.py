@@ -21,7 +21,7 @@ class AdaptiveSTHPF(nn.Module):
 
         self.latest_gate_weights = None
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> dict:
         weak_out = self.weak_branch(x)
         paper_out = self.paper_branch(x)
         strong_out = self.strong_branch(x)
@@ -49,4 +49,10 @@ class AdaptiveSTHPF(nn.Module):
             w3 = weights[:, 2].view(B, 1, 1, 1)
 
         fused = w1 * weak_out + w2 * paper_out + w3 * strong_out
-        return fused
+
+        extra_metadata = {
+            "sthpf_type": "adaptive",
+            "filter_weights": weights.detach(),
+        }
+
+        return {"features": fused, "metadata": extra_metadata}
