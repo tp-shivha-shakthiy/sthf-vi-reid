@@ -30,7 +30,10 @@ def _flatten_metrics(experiment_name, metrics):
 
 
 def append_experiment(experiment_name, metrics):
-    """Append a row to the master comparison CSV.
+    """Append or update a row in the master comparison CSV.
+
+    If the experiment already exists, its row is updated in-place
+    (preserving other rows). Otherwise a new row is appended.
 
     Args:
         experiment_name: Short name for the experiment row.
@@ -39,16 +42,32 @@ def append_experiment(experiment_name, metrics):
     """
     os.makedirs(os.path.dirname(METRICS_PATH), exist_ok=True)
 
-    row = _flatten_metrics(experiment_name, metrics)
-    file_exists = os.path.isfile(METRICS_PATH)
+    new_row = _flatten_metrics(experiment_name, metrics)
+    rows = []
 
-    with open(METRICS_PATH, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=COLUMNS)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(row)
+    if os.path.isfile(METRICS_PATH):
+        with open(METRICS_PATH, newline="") as f:
+            reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames
+            updated = False
+            for row in reader:
+                if not updated and row.get("experiment") == experiment_name:
+                    rows.append(new_row)
+                    updated = True
+                elif row.get("experiment") != experiment_name:
+                    rows.append(row)
+            if not updated:
+                rows.append(new_row)
+    else:
+        fieldnames = COLUMNS
+        rows.append(new_row)
 
-    print(f"Appended {experiment_name} to {METRICS_PATH}")
+    with open(METRICS_PATH, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    print(f"Updated {experiment_name} in {METRICS_PATH}")
 
 
 def load_metrics_from_json(path):
