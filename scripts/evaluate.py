@@ -91,11 +91,11 @@ def _get_experiment_name(config_path, checkpoint_path):
 
 def _print_results(results):
     for direction in ("ir_to_rgb", "rgb_to_ir"):
-        label = direction.replace("_", " -> ").upper()
+        label = direction.replace("_", " -> ").upper().replace("TO", "to")
         print("=" * 50)
         print(f"  {label}")
         print("=" * 50)
-        for key in ("rank1", "rank5", "rank10", "rank20", "mAP"):
+        for key in ("rank1", "rank5", "rank10", "mAP"):
             print(f"    {key:>8s}: {results[direction][key]:.2f}%")
     print("=" * 50)
 
