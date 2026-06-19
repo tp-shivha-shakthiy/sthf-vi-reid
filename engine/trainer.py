@@ -59,7 +59,7 @@ class Trainer:
             # Timing: loss
             t_loss_start = time.perf_counter()
             losses = self.criterion(outputs, pids)
-            total = losses["total"]
+            total = losses["loss_total"]
             t_loss_end = time.perf_counter()
 
             if not torch.isfinite(total):
