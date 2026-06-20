@@ -43,9 +43,11 @@ def _extract_features_debug(config, checkpoint_path):
     model.to(device)
     model.eval()
 
-    batch_size = min(data_cfg.get("batch_size", 16), 2)
+    batch_size = 2
     half = batch_size // 2
-    dummy_frames = torch.randn(batch_size, seq_len, 3, img_size[0], img_size[1])
+    # Use smaller spatial dims for debug to avoid SDC attention OOM on CPU
+    debug_h, debug_w = 64, 32
+    dummy_frames = torch.randn(batch_size, seq_len, 3, debug_h, debug_w)
     shared_pids = list(range(half))
     pids = torch.tensor(shared_pids + shared_pids[:batch_size - half])
     dummy = {
