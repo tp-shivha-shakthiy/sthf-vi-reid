@@ -64,6 +64,13 @@ def main():
     train_cfg = config.get("train", {})
     model_name = config["model"]["name"]
 
+    # Verify adaptive configuration
+    sthpf_type = config.get("model", {}).get("sthpf", {}).get("type", "fixed")
+    print(f"Experiment: {model_name}")
+    print(f"STHPF Type: {sthpf_type}")
+    if sthpf_type == "adaptive":
+        print("AdaptiveSTHPF gating weights will be logged in metadata.")
+
     sequence_length = data_cfg.get("seq_len", 6)
     img_size = tuple(data_cfg.get("img_size", [288, 144]))
     height, width = img_size
@@ -113,38 +120,46 @@ def main():
         batch = next(iter(loader))
         print(f"First batch frames shape: {batch['frames'].shape}")
     else:
-        n_ids = config.get("sampling", {}).get("num_ids", 4)
-        n_per_id = batch_size // n_ids
-        dummy_pids = torch.tensor([i for i in range(n_ids) for _ in range(n_per_id)])
+        debug_batch_size = 1 if args.debug else batch_size
+        dummy_pids = torch.arange(debug_batch_size)
+        dummy_modalities = ["rgb"] if debug_batch_size == 1 else (["rgb"] * (debug_batch_size // 2) + ["ir"] * (debug_batch_size - debug_batch_size // 2))
         batch = {
-            "frames": torch.randn(batch_size, sequence_length, 3, height, width),
+            "frames": torch.randn(debug_batch_size, sequence_length, 3, height, width),
             "pids": dummy_pids,
-            "camids": torch.zeros(batch_size, dtype=torch.long),
-            "modalities": ["rgb"] * batch_size,
-            "track_ids": torch.zeros(batch_size, dtype=torch.long),
+            "camids": torch.zeros(debug_batch_size, dtype=torch.long),
+            "modalities": dummy_modalities,
+            "track_ids": torch.zeros(debug_batch_size, dtype=torch.long),
         }
 
     if args.debug:
-        losses = trainer.training_step(batch)
+        print("Debug mode: forward pass + loss computation (no gradient)")
+        model.eval()
+        with torch.no_grad():
+            outputs = model(batch["frames"], modalities=batch.get("modalities"))
+            losses = criterion(outputs, batch["pids"])
         print("Debug training step completed successfully.")
-        print(f"  loss_id:           {losses['loss_id'].item():.6f}")
-        print(f"  loss_tri:          {losses['loss_tri'].item():.6f}")
-        print(f"  loss_id_int:       {losses['loss_id_int'].item():.6f}")
-        print(f"  loss_tri_int:      {losses['loss_tri_int'].item():.6f}")
-        print(f"  loss_total:        {losses['loss_total'].item():.6f}")
+        for key in ("loss_total", "loss_id", "loss_tri", "loss_id_int", "loss_tri_int"):
+            val = losses[key].item()
+            print(f"  {key:15s}: {val:.6f}")
+        if hasattr(model, "sthpf") and hasattr(model.sthpf, "latest_gate_weights"):
+            fw = model.sthpf.latest_gate_weights
+            if fw is not None:
+                print(f"  gate_weights mean: {fw.mean(dim=0).tolist()}")
+        print("Feature shape:", outputs["features"].shape)
+        print("Logits shape:",  outputs["logits"].shape)
     elif args.real_data:
         if epochs < 200:
             print("WARNING: Running with fewer than 200 epochs — results are preliminary, not full reproduction.")
         print(f"Training {model_name} for {epochs} epochs (lr={lr}, batch_size={batch_size})")
-        trainer.fit(loader, None, epochs)
-
-        save_dir = train_cfg.get("save_dir", f"experiments/{model_name}")
-        final_path = os.path.join(save_dir, "last.pth")
-        torch.save(model.state_dict(), final_path)
-        print(f"Final model weights saved to {final_path}")
         if args.max_batches is not None:
             print(f"  Smoke-test mode: max {args.max_batches} batch(es) per epoch")
         trainer.fit(loader, None, epochs, max_batches=args.max_batches)
+
+        save_dir = train_cfg.get("save_dir", f"experiments/{model_name}")
+        os.makedirs(save_dir, exist_ok=True)
+        final_path = os.path.join(save_dir, "last.pth")
+        torch.save(model.state_dict(), final_path)
+        print(f"Final model weights saved to {final_path}")
     else:
         print("Use --debug for a single step or --real-data for full training.")
         sys.exit(1)
