@@ -1,5 +1,5 @@
-# Cutoff ablation sweeps for HITSZ-VCM
-# Sweeps spatial_cutoff_fs to measure its impact on performance.
+# Cutoff ablation for HITSZ-VCM
+# Runs each ablation variant through training and evaluation.
 
 data:
   root: ./data/hitsz_vcm
@@ -13,14 +13,26 @@ sampling:
   clips_per_id: 4
 
 model:
-  name: sthf_fixed
   backbone: resnet50
   feature_dim: 2048
   num_classes: 500
-  temporal_cutoff_ft: 2
 
 sweep:
-  spatial_cutoff_fs: [2, 5, 10, 15, 20]
+  variants:
+    - name: weak
+      sthpf_type: fixed
+      fs: 5
+      ft: 1
+    - name: paper
+      sthpf_type: fixed
+      fs: 10
+      ft: 2
+    - name: strong
+      sthpf_type: fixed
+      fs: 15
+      ft: 2
+    - name: adaptive
+      sthpf_type: adaptive
 
 loss:
   lambda_id: 1.0
