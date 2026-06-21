@@ -102,11 +102,11 @@ class Trainer:
         avg_losses = {k: v / num_batches for k, v in epoch_losses.items()}
         return avg_losses
 
-    def fit(self, train_loader, val_loader, epochs, max_batches=None):
+    def fit(self, train_loader, val_loader, epochs, max_batches=None, start_epoch=1):
         model_name = self.cfg.get("model", {}).get("name", "run")
         save_dir = self.cfg.get("train", {}).get("save_dir", f"experiments/{model_name}")
 
-        for epoch in range(1, epochs + 1):
+        for epoch in range(start_epoch, epochs + 1):
             train_losses = self.train_epoch(train_loader, max_batches=max_batches)
 
             log_parts = [f"Epoch {epoch}/{epochs}"]

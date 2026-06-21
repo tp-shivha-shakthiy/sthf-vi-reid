@@ -14,6 +14,7 @@ from data.collate import collate_video_fn
 from data.video_sampler import VideoSampler
 from losses.build_loss import build_loss
 from engine.trainer import Trainer
+from engine.seed import set_seed
 
 
 def load_config(path):
@@ -56,9 +57,17 @@ def main():
                         help="Override training epochs (default: config value)")
     parser.add_argument("--max-batches", type=int, default=None,
                         help="Stop after N batches per epoch (smoke test)")
+    parser.add_argument("--resume", type=str, default=None,
+                        help="Path to checkpoint to resume training from")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Random seed (default: config value or 42)")
     args = parser.parse_args()
 
     config = load_config(args.config)
+
+    # Seed handling: CLI arg > config > default 42
+    seed = args.seed if args.seed is not None else config.get("seed", 42)
+    set_seed(seed)
 
     data_cfg = config.get("data", {})
     train_cfg = config.get("train", {})
@@ -85,6 +94,30 @@ def main():
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     caj = build_caj(config.get("augmentation", {}).get("caj"))
     trainer = Trainer(model, criterion, optimizer, scheduler, config, caj=caj)
+
+    # Resume logic
+    start_epoch = 1
+    if args.resume is not None:
+        if not os.path.isfile(args.resume):
+            print(f"Resume checkpoint not found: {args.resume}")
+            sys.exit(1)
+        ckpt = torch.load(args.resume, map_location="cpu", weights_only=False)
+        if "model_state_dict" in ckpt:
+            model.load_state_dict(ckpt["model_state_dict"])
+            print(f"Resumed model weights from {args.resume}")
+        else:
+            model.load_state_dict(ckpt)
+            print(f"Resumed model weights from {args.resume} (raw state_dict, no epoch/optimizer)")
+        if "optimizer_state_dict" in ckpt:
+            optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+            print("  Resumed optimizer state")
+        else:
+            print("  WARNING: checkpoint has no optimizer_state_dict — optimizer reset to initial state")
+        if "epoch" in ckpt:
+            start_epoch = ckpt["epoch"] + 1
+            print(f"  Resuming from epoch {start_epoch}")
+        else:
+            print("  WARNING: checkpoint has no epoch — starting from epoch 1")
 
     root = data_cfg.get("root", "./data/hitsz_vcm")
 
@@ -153,7 +186,8 @@ def main():
         print(f"Training {model_name} for {epochs} epochs (lr={lr}, batch_size={batch_size})")
         if args.max_batches is not None:
             print(f"  Smoke-test mode: max {args.max_batches} batch(es) per epoch")
-        trainer.fit(loader, None, epochs, max_batches=args.max_batches)
+        trainer.fit(loader, None, epochs, max_batches=args.max_batches,
+                    start_epoch=start_epoch)
 
         save_dir = train_cfg.get("save_dir", f"experiments/{model_name}")
         os.makedirs(save_dir, exist_ok=True)

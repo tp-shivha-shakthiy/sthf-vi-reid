@@ -112,7 +112,10 @@ def visualize_adaptive(output_path):
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     for ax, (title, out) in zip(axes.flat, outs.items()):
-        frame = out[0, 0].cpu()
+        if isinstance(out, dict):
+            frame = out["features"][0, 0].cpu()
+        else:
+            frame = out[0, 0].cpu()
         frame = frame - frame.min()
         frame = frame / frame.max()
         frame = frame.permute(1, 2, 0).numpy()

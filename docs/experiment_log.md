@@ -42,3 +42,18 @@
 | RGB → IR         | 100.00% | 100.00% | 100.00% | 100.00% |
 
 > **Note:** Placeholder results. Requires training with `python scripts/train.py --config configs/sthf_adaptive_hitsz.yaml --real-data` on a machine with the HITSZ-VCM dataset, followed by re-evaluation.
+
+---
+
+# Cutoff Ablation
+
+Ablation study sweeping ST-HPF frequency cutoffs. Results in `results/tables/cutoff_ablation.csv`.
+
+| Method  | Cutoff Parameters       | IR→RGB R1 | IR→RGB mAP | RGB→IR R1 | RGB→IR mAP |
+|---------|------------------------|----------:|-----------:|----------:|-----------:|
+| weak    | fs=5, ft=1             |      0.00% |       0.00% |      0.00% |       0.00% |
+| paper   | fs=10, ft=2            |      0.00% |       0.00% |      0.00% |       0.00% |
+| strong  | fs=15, ft=2            |      0.00% |       0.00% |      0.00% |       0.00% |
+| adaptive| learned dynamic weights|      0.00% |       0.00% |      0.00% |       0.00% |
+
+> **Note:** Debug run with synthetic data. Requires `--real-data` with HITSZ-VCM dataset for meaningful metrics.

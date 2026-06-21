@@ -13,6 +13,7 @@ sampling:
   clips_per_id: 4
 
 model:
+  name: cutoff_ablation
   backbone: resnet50
   feature_dim: 2048
   num_classes: 500
