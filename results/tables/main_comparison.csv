@@ -1,4 +1,4 @@
 experiment,ir_to_rgb_rank1,ir_to_rgb_rank5,ir_to_rgb_rank10,ir_to_rgb_rank20,ir_to_rgb_mAP,rgb_to_ir_rank1,rgb_to_ir_rank5,rgb_to_ir_rank10,rgb_to_ir_rank20,rgb_to_ir_mAP
 baseline_hitsz,12.77,30.29,39.18,50.99,13.71,12.29,31.09,41.71,52.97,12.93                
-sthf_adaptive_hitsz,0.24,1.74,3.41,5.63,0.91,0.24,1.19,2.7,5.15,0.89
 sthf_fixed_hitsz,0.4,1.51,3.25,5.87,0.97,0.4,1.74,3.33,5.87,0.98
+sthf_adaptive_hitsz,0.32,1.82,3.73,7.45,1.03,0.71,2.38,3.41,7.14,1.22
