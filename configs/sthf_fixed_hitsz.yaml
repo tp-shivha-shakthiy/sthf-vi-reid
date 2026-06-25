@@ -7,6 +7,7 @@ data:
   num_workers: 4
   seq_len: 6
   img_size: [288, 144]
+  pin_memory: true  
 
 sampling:
   num_ids: 4

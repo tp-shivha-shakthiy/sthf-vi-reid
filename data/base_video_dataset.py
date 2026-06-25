@@ -1,4 +1,5 @@
-class BaseVideoDataset:
+from torch.utils.data import Dataset
+class BaseVideoDataset(Dataset):
     """Base class for video-based person ReID datasets.
 
     All dataset implementations must follow this sample contract:

@@ -1,5 +1,4 @@
 import time
-
 import torch
 from tqdm import tqdm
 
@@ -15,17 +14,34 @@ class Trainer:
         self.cfg = cfg
         self.caj = caj
 
+        # ✅ DEVICE FIX (critical)
+        self.device = next(model.parameters()).device
+
+    def move_batch(self, batch):
+        """Move all tensors safely to GPU/CPU"""
+        batch["frames"] = batch["frames"].to(self.device, non_blocking=True)
+        batch["pids"] = batch["pids"].to(self.device, non_blocking=True)
+
+        if "camids" in batch:
+            batch["camids"] = batch["camids"].to(self.device, non_blocking=True)
+        if "track_ids" in batch:
+            batch["track_ids"] = batch["track_ids"].to(self.device, non_blocking=True)
+
+        return batch
+
     def training_step(self, batch):
+        batch = self.move_batch(batch)
+
         frames = batch["frames"]
         pids = batch["pids"]
 
-        # Apply CAJ augmentation if available
         if self.caj is not None and self.model.training:
             frames = self.caj(frames, pids, batch.get("modalities", []))
 
         self.optimizer.zero_grad()
         outputs = self.model(frames, modalities=batch.get("modalities"))
         losses = self.criterion(outputs, pids)
+
         total = losses["loss_total"]
 
         if not torch.isfinite(total):
@@ -38,25 +54,37 @@ class Trainer:
 
     def train_epoch(self, loader, max_batches=None):
         self.model.train()
+
         epoch_losses = {}
         num_batches = 0
         use_cuda = torch.cuda.is_available()
 
         iterator = enumerate(tqdm(loader, desc="Train", leave=False))
-        for batch_idx, batch in iterator:
-            # Timing: data loading (already loaded by iterator, mark t0)
-            t_data_end = time.perf_counter()
 
-            # Timing: forward
+        for batch_idx, batch in iterator:
+            # -------------------------
+            # MOVE TO DEVICE (FIX)
+            # -------------------------
+            batch = self.move_batch(batch)
+
+            # -------------------------
+            # TIMING START
+            # -------------------------
             t_fwd_start = time.perf_counter()
+
             frames = batch["frames"]
             pids = batch["pids"]
+
+            # CAJ augmentation
             if self.caj is not None and self.model.training:
                 frames = self.caj(frames, pids, batch.get("modalities", []))
+
+            # forward
             outputs = self.model(frames, modalities=batch.get("modalities"))
+
             t_fwd_end = time.perf_counter()
 
-            # Timing: loss
+            # loss
             t_loss_start = time.perf_counter()
             losses = self.criterion(outputs, pids)
             total = losses["loss_total"]
@@ -65,19 +93,21 @@ class Trainer:
             if not torch.isfinite(total):
                 raise RuntimeError(f"Loss is not finite: {total}")
 
-            # Timing: backward
+            # backward
             t_bwd_start = time.perf_counter()
             self.optimizer.zero_grad()
             total.backward()
             self.optimizer.step()
             t_bwd_end = time.perf_counter()
 
-            # Accumulate losses
-            for key, val in losses.items():
-                epoch_losses[key] = epoch_losses.get(key, 0.0) + val.item()
+            # -------------------------
+            # LOGGING
+            # -------------------------
+            for k, v in losses.items():
+                epoch_losses[k] = epoch_losses.get(k, 0.0) + v.item()
+
             num_batches += 1
 
-            # Print per-batch timing
             fwd_ms = (t_fwd_end - t_fwd_start) * 1000
             loss_ms = (t_loss_end - t_loss_start) * 1000
             bwd_ms = (t_bwd_end - t_bwd_start) * 1000
@@ -91,8 +121,8 @@ class Trainer:
 
             print(
                 f"  Batch {batch_idx} | "
-                f"fwd {fwd_ms:.0f}ms | loss {loss_ms:.0f}ms | bwd {bwd_ms:.0f}ms | "
-                f"total {total_ms:.0f}ms{gpu_mem}"
+                f"fwd {fwd_ms:.0f}ms | loss {loss_ms:.0f}ms | "
+                f"bwd {bwd_ms:.0f}ms | total {total_ms:.0f}ms{gpu_mem}"
             )
 
             if max_batches is not None and batch_idx + 1 >= max_batches:
@@ -110,8 +140,9 @@ class Trainer:
             train_losses = self.train_epoch(train_loader, max_batches=max_batches)
 
             log_parts = [f"Epoch {epoch}/{epochs}"]
-            for key, val in train_losses.items():
-                log_parts.append(f"{key}: {val:.4f}")
+            for k, v in train_losses.items():
+                log_parts.append(f"{k}: {v:.4f}")
+
             print(" | ".join(log_parts))
 
             state = {
@@ -120,6 +151,7 @@ class Trainer:
                 "optimizer_state_dict": self.optimizer.state_dict(),
                 "train_losses": train_losses,
             }
+
             save_checkpoint(state, f"{save_dir}/checkpoint_last.pth")
 
             if self.scheduler is not None:

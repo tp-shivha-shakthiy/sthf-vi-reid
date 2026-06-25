@@ -24,7 +24,6 @@ data/buptcampus/
 # Experiments / outputs
 experiments/*/
 results/logs/
-results/tables/
 results/figures/
 results/final_report_assets/
 
